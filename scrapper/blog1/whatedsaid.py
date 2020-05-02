@@ -2,7 +2,7 @@ from bs4 import BeautifulSoup
 import requests
 from dateutil.parser import parse
 import datetime
-from blogposts import Post, Comment
+from data_model.blogposts import Post, Comment
 import csv
 
 
@@ -21,12 +21,27 @@ def append_posts_to_file(file_name, posts):
     for post in posts:
         if len(post.comments) == 0:
             append_list_as_row(file_name, [post.id, post.headline.encode('utf-8'), post.summary.encode('utf-8'),
-                                           '', '', '', '', ''])
+                                           post.url,
+                                           '', '', '', '', '', ''])
         else:
             for comment in post.comments:
                 append_list_as_row(file_name, [post.id, post.headline.encode('utf-8'), post.summary.encode('utf-8'),
-                                               comment.id, comment.refid, comment.timestamp,
-                                               comment.user.encode('utf-8'), comment.msg.encode('utf-8')])
+                                               post.url, comment.id, comment.ref_id, comment.timestamp,
+                                               comment.username.encode('utf-8'), comment.replied_to.encode('utf-8'),
+                                               comment.msg.encode('utf-8')])
+
+
+def append_post_to_file(file_name, post):
+    if len(post.comments) == 0:
+        append_list_as_row(file_name, [post.id, post.headline.encode('utf-8'), post.summary.encode('utf-8'),
+                                       post.url,
+                                       '', '', '', '', '', ''])
+    else:
+        for comment in post.comments:
+            append_list_as_row(file_name, [post.id, post.headline.encode('utf-8'), post.summary.encode('utf-8'),
+                                           post.url, comment.id, comment.ref_id, comment.timestamp,
+                                           comment.username.encode('utf-8'), comment.replied_to.encode('utf-8'),
+                                           comment.msg.encode('utf-8')])
 
 
 def append_list_as_row(file_name, list_of_elem):
@@ -47,9 +62,9 @@ def first_open_csv(file_name, fieldnames):
 def main():
     post_id = 0
     posts = []
-    file_name = 'whatedsaid_scrape.csv'
-    fieldnames = ['post_id', "post_headline", "post_summary", "comment_id", "comment_ref_id",
-                  "comment_timestamp", "comment_user", "comment_message"]
+    file_name = 'blog1/whatedsaid_scrape.csv'
+    fieldnames = ['post_id', "post_headline", "post_summary", "post_url", "comment_id", "comment_ref_id",
+                  "comment_timestamp", "comment_username", "comment_replied_to", "comment_message"]
     try:
         post_id = get_last_post_id_from_file(file_name)
     except Exception as e:
@@ -61,7 +76,7 @@ def main():
     archive_list = soup.find('select', id='archives-dropdown-5').find_all('option')
     archive_list.pop(0)  # select month phrase with no link to use
 
-    for i in range(100, len(archive_list)):
+    for i in range(0, 2):
         selection = archive_list[i]
         page_link = selection['value']
         # print(page_link)
@@ -71,17 +86,18 @@ def main():
         articles = article_soup.find_all('article')
         for article in articles:
             post_id = post_id + 1
-            headline = article.header.h1.a.text
+            post_headline = article.header.h1.a.text
+            post_url = article.header.h1.a['href']
 
-            summary_source = requests.get(article.header.h1.a['href']).text
+            summary_source = requests.get(post_url).text
             # print(headline)
             summary_soup = BeautifulSoup(summary_source, 'lxml')
             summary_list = summary_soup.find('div', class_='entry-content').find_all('p')
-            summary = ""
+            post_summary = ""
             for s in summary_list:
-                summary = summary + " " + s.text.replace('\n', '').replace('\t', '')\
+                post_summary = post_summary + " " + s.text.replace('\n', '').replace('\t', '')\
                     # .replace('\U0001f642', ':)').replace('मुलांचे हक्क', '')
-            # print(summary)
+            # print(post_summary)
             try:
                 comments = summary_soup.find('ol', class_='comment-list').find_all('li')
             except Exception as e:
@@ -93,7 +109,7 @@ def main():
 
             for comment in comments:
                 comment_id = comment_id + 1
-                comment_refid = 0
+                comment_ref_id = 0
                 try:
                     user = comment.find('div', class_='comment-author vcard').b.a.text.replace('\n', '').replace(
                         '\t',
@@ -132,7 +148,7 @@ def main():
                     msg = ''
 
                 if not (user == '' and msg == '' and timestamp == ''):
-                    comm = Comment(comment_id, comment_refid, timestamp, user, msg)
+                    comm = Comment(comment_id, comment_ref_id, timestamp, user, "", msg)
                     comm_list.append(comm)
                 else:
                     comment_id = comment_id - 1
@@ -141,9 +157,12 @@ def main():
                 while fail_condition:
                     try:
                         replies = comment.find('ol', class_='children').find_all('li')
-                        comment_refid = comment_id
+                        comment_ref_id = comment_id
+                        replied_to = user
+                        print(user)
 
                         for reply in replies:
+                            print('ok')
                             comment_id = comment_id + 1
                             try:
                                 user = reply.find('div', class_='comment-author vcard').b.a.text.replace('\n',
@@ -185,7 +204,7 @@ def main():
                                 msg = ''
 
                             if not (user == '' and msg == '' and timestamp == ''):
-                                comm = Comment(comment_id, comment_refid, timestamp, user, msg)
+                                comm = Comment(comment_id, comment_ref_id, timestamp, user, replied_to, msg)
                                 comm_list.append(comm)
                             else:
                                 comment_id = comment_id - 1
@@ -194,7 +213,14 @@ def main():
                     except Exception as e:
                         fail_condition = False
 
-            posts.append(Post(post_id, headline, summary, comm_list))
+            posts.append(Post(post_id, post_headline, post_summary, post_url, comm_list))
 
-    append_posts_to_file(file_name, posts)
+    # append_posts_to_file(file_name, posts)
     # print(post.id, post.comments)
+
+    index = 0  # trebuie modificat cu primul index din range-ul de parcurgere
+    for post in posts:
+        post_file_name = "blog1/post_" + str(index)
+        append_post_to_file(post_file_name, post)
+        index = index + 1
+
