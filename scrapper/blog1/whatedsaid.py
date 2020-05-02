@@ -69,14 +69,22 @@ def get_headline(article):
     return article.header.h1.a.text
 
 
-def get_summary(summary_soup):
-    summary_list = summary_soup.find('div', class_='entry-content').find_all('p')
+def get_summary(soup):
+    summary_list = soup.find('div', class_='entry-content').find_all('p')
     post_summary = ""
     for s in summary_list:
         post_summary = post_summary + " " + s.text.replace('\n', '').replace('\t', '') \
             # .replace('\U0001f642', ':)').replace('मुलांचे हक्क', '')
     # print(post_summary)
     return post_summary
+
+
+def get_comments(soup):
+    try:
+        comments = soup.find('ol', class_='comment-list').find_all('li')
+    except Exception as e:
+        comments = []
+    return comments
 
 
 def get_username(comment):
@@ -152,15 +160,11 @@ def main(args):
             if isinstance(summary_soup, Exception):
                 return
             post_summary = get_summary(summary_soup)
-            try:
-                comments = summary_soup.find('ol', class_='comment-list').find_all('li')
-            except Exception as e:
-                comments = []
 
+            comments = get_comments(summary_soup)
             comment_id = 0
             comments_final_list = []
             anonymous = 1
-
             for comment in comments:
                 comment_id = comment_id + 1
                 comment_ref_id = 0
