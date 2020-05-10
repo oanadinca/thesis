@@ -2,9 +2,10 @@ from bs4 import BeautifulSoup
 import requests
 from dateutil.parser import parse
 import datetime
-from data_model.blogposts import Post, Comment, PostEncoder
+from data_model.blogposts import Post, Comment
 import csv
-import json
+
+# TODO: need to refactor as whatedsaid
 
 
 def get_last_post_id_from_file(file_name):
@@ -20,41 +21,39 @@ def get_last_post_id_from_file(file_name):
 def append_posts_to_file(file_name, posts):
     for post in posts:
         if len(post.comments) == 0:
-            append_list_as_row(file_name, [post.id, post.headline, post.summary,
-                                           post.timestamp, post.author, post.url,
+            append_list_as_row(file_name, [post.id, post.headline.encode('utf-8'), post.summary.encode('utf-8'),
+                                           post.url,
                                            '', '', '', '', '', ''])
         else:
             for comment in post.comments:
-                append_list_as_row(file_name, [post.id, post.headline, post.summary,
-                                               post.timestamp, post.author, post.url,
-                                               comment.id, comment.ref_id, comment.timestamp,
-                                               comment.username, comment.replied_to,
-                                               comment.msg])
+                append_list_as_row(file_name, [post.id, post.headline.encode('utf-8'), post.summary.encode('utf-8'),
+                                               post.url, comment.id, comment.ref_id, comment.timestamp,
+                                               comment.username.encode('utf-8'), comment.replied_to.encode('utf-8'),
+                                               comment.msg.encode('utf-8')])
 
 
+# TODO: how to append per post all the comments?
 def append_post_to_file(file_name, post):
-    # if len(post.comments) == 0:
-    #     append_list_as_row(file_name, [post.id, post.headline, post.summary,
-    #                                    post.timestamp, post.author, post.url,
-    #                                    '', '', '', '', '', ''])
-    # else:
-    for comment in post.comments:
-        append_list_as_row(file_name, [
-                                       # post.id, post.headline, post.summary,
-                                       # post.timestamp, post.author, post.url,
-                                       comment.id, comment.ref_id, comment.timestamp,
-                                       comment.username, comment.replied_to,
-                                       comment.msg])
+    if len(post.comments) == 0:
+        append_list_as_row(file_name, [post.id, post.headline.encode('utf-8'), post.summary.encode('utf-8'),
+                                       post.url,
+                                       '', '', '', '', '', ''])
+    else:
+        for comment in post.comments:
+            append_list_as_row(file_name, [post.id, post.headline.encode('utf-8'), post.summary.encode('utf-8'),
+                                           post.url, comment.id, comment.ref_id, comment.timestamp,
+                                           comment.username.encode('utf-8'), comment.replied_to.encode('utf-8'),
+                                           comment.msg.encode('utf-8')])
 
 
 def append_list_as_row(file_name, list_of_elem):
-    with open(file_name, 'a+', newline='', encoding='utf8') as write_obj:
+    with open(file_name, 'a+', newline='') as write_obj:
         csv_writer = csv.writer(write_obj)
         csv_writer.writerow(list_of_elem)
 
 
 def first_open_csv(file_name, fieldnames):
-    with open(file_name, 'w', encoding='utf8') as writer_file:
+    with open(file_name, 'w') as writer_file:
         csv_writer = csv.writer(writer_file)
         csv_writer.writerow(fieldnames)
 
@@ -76,29 +75,9 @@ def get_summary(soup):
     summary_list = soup.find('div', class_='entry-content').find_all('p')
     post_summary = ""
     for s in summary_list:
-        post_summary = post_summary + " " + s.text.replace('\n', '').replace('\t', '') \
-            # .replace('\U0001f642', ':)').replace('मुलांचे हक्क', '')
+        post_summary = post_summary + " " + s.text.replace('\n', '').replace('\t', '')
     # print(post_summary)
     return post_summary
-
-
-def get_post_timestamp(soup):
-    try:
-        date = soup.find('span', class_='posted-on').a.time.text.replace('\n', '').replace('\t', '')
-        parsed_date = parse(date)
-        timestamp = datetime.datetime.timestamp(parsed_date)
-    except Exception as e:
-        timestamp = ''
-    return timestamp
-
-
-def get_post_username(soup):
-    try:
-        username = soup.find('span', class_='author vcard').a.text
-    except Exception as e:
-        username = ''
-
-    return username
 
 
 def get_comments(soup):
@@ -134,13 +113,8 @@ def get_message(comment):
     msg = ""
     try:
         msg_list = comment.find('div', class_='comment-content').find_all('p')
-        like_buttons = comment.find('div', class_='comment-content').find('p',
-                                                                          class_='comment-likes comment-not-liked')
-        if like_buttons in msg_list:
-            msg_list.remove(like_buttons)
         for m in msg_list:
-            msg = msg + m.text.replace('\n', '').replace('\t', '') \
-                # .replace('\U0001f642', ':)')
+            msg = msg + m.text.replace('\n', '').replace('\t', '')
     except Exception as e:
         msg = ''
     return msg
@@ -149,11 +123,9 @@ def get_message(comment):
 def main(args):
     post_id = 0
     posts = []
-    postsJSON = []
 
-    file_name = 'blog1/whatedsaid_scrape.csv'
-    fieldnames = ['post_id', "post_headline", "post_summary", "post_timestamp", "post_author", "post_url",
-                  "comment_id", "comment_ref_id",
+    file_name = 'blog2/vickyloras_scrape.csv'
+    fieldnames = ['post_id', "post_headline", "post_summary", "post_url", "comment_id", "comment_ref_id",
                   "comment_timestamp", "comment_username", "comment_replied_to", "comment_message"]
     try:
         post_id = get_last_post_id_from_file(file_name)
@@ -164,12 +136,12 @@ def main(args):
     if isinstance(page_soup, Exception):
         return
 
-    archive_list = page_soup.find('select', id='archives-dropdown-5').find_all('option')
-    archive_list.pop(0)  # select month phrase with no url to use
+    archive_list = []
+    for i in range(1, 31):  # page 30 is the one that holds the first blog posts
+        archive_list.append(args.url + "page/" + str(i))
 
     for i in range(0, 2):
-        selection = archive_list[i]
-        page_url = selection['value']
+        page_url = archive_list[i]
         # print(page_url)
         article_soup = get_soup(page_url)
         if isinstance(article_soup, Exception):
@@ -184,12 +156,10 @@ def main(args):
             if isinstance(summary_soup, Exception):
                 return
             post_summary = get_summary(summary_soup)
-            post_timestamp = get_post_timestamp(summary_soup)
-            post_author = get_post_username(summary_soup)
 
             comments = get_comments(summary_soup)
             comment_id = 0
-            comments_final_list = [Comment(0, 0, post_timestamp, post_author, "", post_summary)]
+            comments_final_list = []
             anonymous = 1
             for comment in comments:
                 comment_id = comment_id + 1
@@ -202,7 +172,7 @@ def main(args):
                 msg = get_message(comment)
 
                 if not (username == '' and msg == '' and timestamp == ''):
-                    comm = Comment(comment_id, comment_ref_id, timestamp, username, post_author, msg)
+                    comm = Comment(comment_id, comment_ref_id, timestamp, username, "", msg)
                     comments_final_list.append(comm)
                 else:
                     comment_id = comment_id - 1
@@ -234,18 +204,11 @@ def main(args):
                     except Exception as e:
                         fail_condition = False
 
-            post = Post(post_id, post_headline, post_summary, post_timestamp, post_author,
-                        post_url, comments_final_list)
-            postJSONData = json.dumps(post, indent=4, cls=PostEncoder)
-            posts.append(post)
-            postsJSON.append(postJSONData)
-            print(postJSONData)
+            posts.append(Post(post_id, post_headline, post_summary, post_url, comments_final_list))
 
     append_posts_to_file(file_name, posts)
     # print(post.id, post.comments)
-    # print(postsJSON)
 
     for post in posts:
-        post_file_name = "blog1/post_" + str(post.id)
+        post_file_name = "blog2/post_" + str(post.id)
         append_post_to_file(post_file_name, post)
-
