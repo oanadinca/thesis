@@ -2,9 +2,8 @@ from bs4 import BeautifulSoup
 import requests
 from dateutil.parser import parse
 import datetime
-from data_model.blogposts import Post, Comment, PostEncoder
+from data_model.blogposts import Post, Comment, Contribution
 import csv
-import json
 
 
 def get_last_post_id_from_file(file_name):
@@ -27,9 +26,9 @@ def append_posts_to_file(file_name, posts):
             for comment in post.comments:
                 append_list_as_row(file_name, [post.id, post.headline, post.summary,
                                                post.timestamp, post.author, post.url,
-                                               comment.id, comment.ref_id, comment.timestamp,
-                                               comment.username, comment.replied_to,
-                                               comment.msg])
+                                               comment.genid, comment.ref, comment.time,
+                                               comment.nickname,
+                                               comment.text])
 
 
 def append_post_to_file(file_name, post):
@@ -40,11 +39,11 @@ def append_post_to_file(file_name, post):
     # else:
     for comment in post.comments:
         append_list_as_row(file_name, [
-                                       # post.id, post.headline, post.summary,
-                                       # post.timestamp, post.author, post.url,
-                                       comment.id, comment.ref_id, comment.timestamp,
-                                       comment.username, comment.replied_to,
-                                       comment.msg])
+                                        # post.id, post.headline, post.summary,
+                                        # post.timestamp, post.author, post.url,
+                                        comment.genid, comment.ref, comment.time,
+                                        comment.nickname,
+                                        comment.text])
 
 
 def append_list_as_row(file_name, list_of_elem):
@@ -236,16 +235,16 @@ def main(args):
 
             post = Post(post_id, post_headline, post_summary, post_timestamp, post_author,
                         post_url, comments_final_list)
-            postJSONData = json.dumps(post, indent=4, cls=PostEncoder)
             posts.append(post)
-            postsJSON.append(postJSONData)
-            print(postJSONData)
+
+            # ElasticSearch model
+            contribution = Contribution(post_id, comments_final_list)
+            postsJSON.append(contribution)
 
     append_posts_to_file(file_name, posts)
-    # print(post.id, post.comments)
-    # print(postsJSON)
 
     for post in posts:
         post_file_name = "blog1/post_" + str(post.id)
         append_post_to_file(post_file_name, post)
 
+    return postsJSON
